@@ -4,139 +4,136 @@
   <meta charset="UTF-8">
   <title>Mock Exam Trainer</title>
   <style>
-    body {
-      font-family: Arial, sans-serif;
-      background: #f0f4f8;
-      text-align: center;
-      padding: 20px;
-    }
-    .container {
-      background: white;
-      padding: 20px;
-      border-radius: 15px;
-      max-width: 600px;
-      margin: auto;
-      box-shadow: 0 4px 10px rgba(0,0,0,0.1);
-    }
-    h1 {
-      color: #2c3e50;
-    }
-    .question {
-      font-size: 18px;
-      margin: 20px 0;
-    }
-    .choices button {
-      display: block;
-      width: 100%;
-      margin: 10px 0;
-      padding: 10px;
-      border: none;
-      border-radius: 8px;
-      background: #3498db;
-      color: white;
-      cursor: pointer;
-    }
-    .choices button:hover {
-      background: #2980b9;
-    }
-    .feedback {
-      font-weight: bold;
-      margin-top: 10px;
-    }
-    #nextBtn {
-      margin-top: 20px;
-      padding: 10px 20px;
-      border: none;
-      border-radius: 8px;
-      background: #2ecc71;
-      color: white;
-      cursor: pointer;
-      display: none;
-    }
-    #upload {
-      margin-bottom: 20px;
-    }
-    #score {
-      margin-top: 10px;
-      font-weight: bold;
-    }
+    body { font-family: Arial; background:#f0f4f8; text-align:center; padding:20px; }
+    .container { background:white; padding:20px; border-radius:15px; max-width:700px; margin:auto; box-shadow:0 4px 10px rgba(0,0,0,0.1); }
+    h1 { color:#2c3e50; }
+    .question { font-size:18px; margin:20px 0; }
+    .choices button { display:block; width:100%; margin:8px 0; padding:10px; border:none; border-radius:8px; background:#3498db; color:white; cursor:pointer; }
+    .choices button:hover { background:#2980b9; }
+    .feedback { font-weight:bold; margin-top:10px; }
+    #nextBtn { margin-top:20px; padding:10px 20px; border:none; border-radius:8px; background:#2ecc71; color:white; cursor:pointer; display:none; }
+    #score { margin:10px 0; font-weight:bold; }
+    select { padding:8px; margin:10px; }
+    input[type=text] { padding:10px; width:90%; margin-top:10px; }
   </style>
 </head>
 <body>
 
 <div class="container">
   <h1>Mock Exam Trainer</h1>
-  <input type="file" id="upload" accept=".json">
+
+  <input type="file" id="upload" accept=".json"><br>
+
+  <label>Select Level:</label>
+  <select id="levelSelect">
+    <option value="easy">Easy</option>
+    <option value="difficult">Difficult</option>
+  </select>
+
   <div id="score"></div>
+
   <div id="quiz">
     <div class="question" id="question"></div>
-    <div class="choices" id="choices"></div>
+    <div id="choices" class="choices"></div>
+    <input type="text" id="identificationInput" placeholder="Type your answer here" style="display:none;">
     <div class="feedback" id="feedback"></div>
     <button id="nextBtn" onclick="nextQuestion()">Next</button>
   </div>
 </div>
 
 <script>
+let rawData = {};
 let questions = [];
 let currentIndex = 0;
 let score = 0;
 let answered = false;
 
-// Upload JSON file
-document.getElementById('upload').addEventListener('change', function(e) {
+// Upload JSON
+ document.getElementById('upload').addEventListener('change', function(e) {
   const file = e.target.files[0];
   const reader = new FileReader();
   reader.onload = function(event) {
-    questions = JSON.parse(event.target.result);
-    currentIndex = 0;
-    score = 0;
-    loadQuestion();
+    rawData = JSON.parse(event.target.result);
+    prepareQuestions();
   };
   reader.readAsText(file);
 });
 
+// Prepare mixed questions (MC + TF + ID)
+function prepareQuestions() {
+  const level = document.getElementById('levelSelect').value;
+  const data = rawData[level];
+
+  questions = [];
+
+  // Multiple Choice
+  data.multiple_choice.forEach(q => {
+    questions.push({ ...q, type: 'mc' });
+  });
+
+  // True/False
+  data.true_false.forEach(q => {
+    questions.push({ ...q, type: 'tf' });
+  });
+
+  // Identification
+  data.identification.forEach(q => {
+    questions.push({ ...q, type: 'id' });
+  });
+
+  currentIndex = 0;
+  score = 0;
+  loadQuestion();
+}
+
 function loadQuestion() {
   answered = false;
   const q = questions[currentIndex];
-  document.getElementById('question').innerText = q.question;
-  const choicesDiv = document.getElementById('choices');
-  choicesDiv.innerHTML = '';
+
+  document.getElementById('question').innerText = `Item ${currentIndex + 1}: ${q.question}`;
   document.getElementById('feedback').innerText = '';
   document.getElementById('nextBtn').style.display = 'none';
 
-  document.getElementById('score').innerText = `Score: ${score}/${questions.length}`;
+  const choicesDiv = document.getElementById('choices');
+  const input = document.getElementById('identificationInput');
 
-  q.choices.forEach(choice => {
-    const btn = document.createElement('button');
-    btn.innerText = choice;
-    btn.onclick = () => checkAnswer(choice);
-    choicesDiv.appendChild(btn);
-  });
+  choicesDiv.innerHTML = '';
+  input.style.display = 'none';
+
+  if (q.type === 'mc' || q.type === 'tf') {
+    q.choices.forEach(choice => {
+      const btn = document.createElement('button');
+      btn.innerText = choice;
+      btn.onclick = () => checkAnswer(choice);
+      choicesDiv.appendChild(btn);
+    });
+  } else {
+    input.style.display = 'block';
+    input.value = '';
+    input.onkeydown = function(e) {
+      if (e.key === 'Enter') checkAnswer(input.value);
+    };
+  }
+
+  document.getElementById('score').innerText = `Score: ${score}/${questions.length}`;
 }
 
 function checkAnswer(selected) {
-  if (answered) return; // prevent multiple answers
+  if (answered) return;
 
-  const correct = questions[currentIndex].answer;
+  const q = questions[currentIndex];
+  const correct = q.answer.toLowerCase().trim();
+  const user = selected.toLowerCase().trim();
+
   const feedback = document.getElementById('feedback');
-  const buttons = document.querySelectorAll('.choices button');
 
-  buttons.forEach(btn => {
-    if (btn.innerText === correct) {
-      btn.style.background = '#2ecc71';
-    } else if (btn.innerText === selected) {
-      btn.style.background = '#e74c3c';
-    }
-    btn.disabled = true;
-  });
-
-  if (selected === correct) {
-    feedback.innerText = "✅ Correct!";
-    feedback.style.color = "green";
+  if (user === correct) {
+    feedback.innerText = '✅ Correct!';
+    feedback.style.color = 'green';
     score++;
   } else {
-    feedback.innerText = `❌ Wrong! Correct answer: ${correct}`;
-    feedback.style.color = "red";
+    feedback.innerText = `❌ Wrong! Correct answer: ${q.answer}`;
+    feedback.style.color = 'red';
   }
 
   answered = true;
@@ -149,7 +146,7 @@ function nextQuestion() {
   if (currentIndex < questions.length) {
     loadQuestion();
   } else {
-    document.getElementById('quiz').innerHTML = `🎉 Quiz Finished!<br>Your Score: ${score}/${questions.length}`;
+    document.getElementById('quiz').innerHTML = `🎉 Finished!<br>Your Score: ${score}/${questions.length}`;
   }
 }
 </script>
